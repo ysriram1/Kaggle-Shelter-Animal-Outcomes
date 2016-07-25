@@ -72,17 +72,25 @@ zscore_fit = StandardScaler().fit(train)
 train_normalized = zscore_fit.transform(train)
 test_normalized = zscore_fit.transform(test)
 
+from sklearn.cross_validation import train_test_split 
 
+X_train, X_test, y_train, y_test = train_test_split(train, target, test_size=0.33, random_state=42)
+
+from sklearn.metrics import accuracy_score, confusion_matrix
 
 ########################First try is without train test split#####################
 from sklearn.ensemble import AdaBoostClassifier as ad
 from sklearn.ensemble import RandomForestClassifier as rf
 from sklearn.naive_bayes import GaussianNB
-from sklearn.neural_network import MLPClassifier
+from sknn.mlp import Classifier, Layer
+from sklearn import svm
 
-
-clf = MLPClassifier(algorithm='l-bfgs', alpha=1e-5, hidden_layer_sizes=(5, 5), random_state=1)
-
+nn = Classifier(
+    layers=[Layer("Softmax")],
+    learning_rate=0.001,
+    n_iter=25)
+nn.fit(train_normalized, target)
+y_predict = nn.predict(test_normalized)
 
 ad_fit = ad(n_estimators = 10).fit(train,target)
 y_pred = ad_fit.predict(test)
@@ -91,6 +99,12 @@ y_pred = rf().fit(train,target).predict(test)
 
 gnb = GaussianNB()
 y_pred = gnb.fit(train, target).predict(test)
+
+
+clf = svm.SVC()
+clf = clf.fit(X_train, y_train)
+y_pred = clf.predict(X_test)
+
 
 ################SUBMISSION#################
 
