@@ -9,7 +9,7 @@ import os
 import pandas as pd
 import numpy as np
 
-os.chdir('C:/Users/syarlag1/Desktop/kaggle animal shelter')    
+os.chdir('C:/Users/syarlag1/Desktop/Kaggle-Shelter-Animal-Outcomes')    
 
 train_raw = pd.read_csv('./train.csv', usecols=[3,5,6,7,8,9])
 test_raw = pd.read_csv('./test.csv', usecols=range(3,8))
@@ -48,14 +48,52 @@ for age in test_raw.AgeuponOutcome:
         
 test_raw.AgeuponOutcome = pd.Series(age_numerical)     
 
-train = train_raw.iloc[:,1:train_raw.shape[1]]
 target = train_raw.iloc[:,0]
+train_raw = train_raw.iloc[:,1:train_raw.shape[1]]
 
-test = test_raw
+train_raw.replace('[/,\s]','',inplace=True, regex=True)
+test_raw.replace('[/,\s]','',inplace=True, regex=True)
+
+train_raw.replace([np.inf,np.nan],0,inplace=True)
+test_raw.replace([np.inf,np.nan],0,inplace=True)
 
 
-## First try is without train test split
+combined_raw = train_raw.append(test_raw)
 
+
+combined_raw_encoded = pd.get_dummies(combined_raw)
+
+train = combined_raw_encoded.iloc[:train_raw.shape[0],:]
+test = combined_raw_encoded.iloc[train_raw.shape[0]:combined_raw.shape[0],:]
+
+from sklearn.preprocessing import StandardScaler
+
+zscore_fit = StandardScaler().fit(train)
+train_normalized = zscore_fit.transform(train)
+test_normalized = zscore_fit.transform(test)
+
+
+
+########################First try is without train test split#####################
+from sklearn.ensemble import AdaBoostClassifier as ad
 from sklearn.ensemble import RandomForestClassifier as rf
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neural_network import MLPClassifier
 
-fit = rf(random_state=99).fit(train,target)
+
+clf = MLPClassifier(algorithm='l-bfgs', alpha=1e-5, hidden_layer_sizes=(5, 5), random_state=1)
+
+
+ad_fit = ad(n_estimators = 10).fit(train,target)
+y_pred = ad_fit.predict(test)
+
+y_pred = rf().fit(train,target).predict(test)
+
+gnb = GaussianNB()
+y_pred = gnb.fit(train, target).predict(test)
+
+################SUBMISSION#################
+
+pred_df = pd.DataFrame(y_pred); submission_format = pd.get_dummies(pred_df); 
+submission_format.columns = ['Adoption','Died','Euthanasia','Return_to_owner','Transfer']
+submission_format.to_csv('./submission.csv')
