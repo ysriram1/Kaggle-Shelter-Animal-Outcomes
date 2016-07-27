@@ -8,60 +8,61 @@ This is a temporary script file.
 import os
 import pandas as pd
 import numpy as np
+from datetime import datetime
 
 os.chdir('C:/Users/syarlag1/Desktop/Kaggle-Shelter-Animal-Outcomes')    
 
-train_raw = pd.read_csv('./train.csv', usecols=[3,5,6,7,8,9])
-test_raw = pd.read_csv('./test.csv', usecols=range(3,8))
+train_raw = pd.read_csv('./train.csv', usecols=[2,3,5,6,7,8,9])
+test_raw = pd.read_csv('./test.csv', usecols=range(2,8))
 
-
-
-#replacing the Age column with the numerical value in days. '1 Year' to 365.
-
-age_numerical = []
-
-for age in train_raw.AgeuponOutcome: 
-    if age is np.nan: 
-        age_numerical.append(None)
-        continue
-    i = 2
-    if age[1].isdigit(): i = 3
-    if age[i] == 'd': age_numerical.append(int(age[:i-1]))
-    elif age[i] == 'w': age_numerical.append(int(age[:i-1])*7)
-    elif age[i] == 'm': age_numerical.append(int(age[:i-1])*30)
-    elif age[i] == 'y': age_numerical.append(int(age[:i-1])*365)
-
-train_raw.AgeuponOutcome = pd.Series(age_numerical)
-
-age_numerical = []
-
-for age in test_raw.AgeuponOutcome:
-    if age is np.nan: 
-        age_numerical.append(None)
-        continue
-    i = 2
-    if age[1].isdigit(): i = 3
-    if age[i] == 'd': age_numerical.append(int(age[:i-1]))
-    elif age[i] == 'w': age_numerical.append(int(age[:i-1])*7)
-    elif age[i] == 'm': age_numerical.append(int(age[:i-1])*30)
-    elif age[i] == 'y': age_numerical.append(int(age[:i-1])*365)
-        
-test_raw.AgeuponOutcome = pd.Series(age_numerical)     
-
-target = train_raw.iloc[:,0]
-train_raw = train_raw.iloc[:,1:train_raw.shape[1]]
-
-train_raw.replace('[/,\s]','',inplace=True, regex=True)
-test_raw.replace('[/,\s]','',inplace=True, regex=True)
-
-train_raw.replace([np.inf,np.nan],0,inplace=True)
-test_raw.replace([np.inf,np.nan],0,inplace=True)
-
+target = train_raw.iloc[:,1]
+train_raw = train_raw.iloc[:,[0,2,3,4,5,6]]
 
 combined_raw = train_raw.append(test_raw)
 
+#replacing the Age column with the numerical value in days. '1 Year' to 365.
+age_numerical = []
+for age in combined_raw.AgeuponOutcome: 
+    if age is np.nan: 
+        age_numerical.append(None)
+        continue
+    i = 2
+    if age[1].isdigit(): i = 3
+    if age[i] == 'd': age_numerical.append(int(age[:i-1]))
+    elif age[i] == 'w': age_numerical.append(int(age[:i-1])*7)
+    elif age[i] == 'm': age_numerical.append(int(age[:i-1])*30)
+    elif age[i] == 'y': age_numerical.append(int(age[:i-1])*365)
+
+combined_raw.AgeuponOutcome = pd.Series(age_numerical)
+
+#Parsing date-time
+
+hour = []; day = []; month = [];
+for value in combined_raw.DateTime:
+    dateTimeTemp = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+    hour.append(str(dateTimeTemp.hour))
+    month.append(str(dateTimeTemp.month))
+    day.append(str(dateTimeTemp.weekday()))
+
+combined_raw['hour'] = pd.Series(hour)
+combined_raw['day'] = pd.Series(day)
+combined_raw['month'] = pd.Series(month)
+
+del combined_raw['DateTime']
+
+combined_raw.replace([np.inf,np.nan],0,inplace=True)
 
 combined_raw_encoded = pd.get_dummies(combined_raw)
+
+
+
+#train_raw.replace('[/,\s]','',inplace=True, regex=True)
+#test_raw.replace('[/,\s]','',inplace=True, regex=True)
+#train_raw.replace([np.inf,np.nan],0,inplace=True)
+#test_raw.replace([np.inf,np.nan],0,inplace=True)
+
+
+
 
 train = combined_raw_encoded.iloc[:train_raw.shape[0],:]
 test = combined_raw_encoded.iloc[train_raw.shape[0]:combined_raw.shape[0],:]
@@ -93,7 +94,7 @@ from sklearn.lda import LDA
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
-
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
 
 nn = Classifier(
     layers=[Layer("Softmax")],
@@ -138,7 +139,7 @@ for i in range(len(confusionMat)):
 logreg = LogisticRegression().fit(X_train, y_train)
 y_pred = logreg.predict(X_test)
 y_pred_train = logreg.predict(X_train)
-log_acc =  accuracy_score(y_pred, y_test) #0.63 highest
+log_acc =  accuracy_score(y_pred, y_test) #0.64 highest
 
 clf = DecisionTreeClassifier().fit(X_train, y_train)
 y_pred = clf.predict(X_test)
@@ -148,6 +149,13 @@ neigh = KNeighborsClassifier(n_neighbors=13).fit(X_train, y_train)
 y_pred = neigh.predict(X_test)
 nn_acc =  accuracy_score(y_pred, y_test) #0.61
 
+quad = QuadraticDiscriminantAnalysis().fit(X_train, y_train)
+y_pred = quad.predict(X_test)
+quad_acc = accuracy_score(y_pred, y_test) # 0.19 very low
+
+ldaC = LDA(solver='lsqr', shrinkage='auto').fit(X_train, y_train) #LDA with shrinkage
+y_pred = ldaC.predict(X_test)
+lda_acc = accuracy_score(y_pred, y_test) #0.58
 
 #########################################
 from sklearn.cross_validation import KFold
@@ -248,8 +256,16 @@ nEst = range(1, 51, 10)
 train_scores, test_scores = calc_params(train_standardized, target, rf_fit, nEst, 'n_estimators', 5, metric = 'accuracy')
 pd.DataFrame(np.array([test_scores, nEst]).T, columns = ['Test Recall', 'Number of Estimators'])
 
+
+##########################
 rf_fit = rf(min_samples_leaf=8, n_estimators = 1).fit(train_standardized, target) #min split of 8 gives least variance
 y_pred = rf_fit.predict_proba(test_standardized) 
+
+log_fit = LogisticRegression().fit(train_standardized, target)
+y_pred = log_fit.predict_proba(test_standardized) 
+
+lda_fit = LDA().fit(train_standardized, target)
+y_pred = lda_fit.predict_proba(test_standardized)
 
 ################SUBMISSION#################
 
