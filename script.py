@@ -82,7 +82,7 @@ from sklearn.cross_validation import train_test_split
 X_train, X_test, y_train, y_test = train_test_split(train, target, test_size=0.33, random_state=42)
 X_train, X_test, y_train, y_test = train_test_split(train_standardized, target, test_size=0.33, random_state=42)
 
-########################First try is without train test split#####################
+########################First try to just get the accuracy values -- this will indicate what method makes sense#####################
 from sklearn.ensemble import AdaBoostClassifier as ad
 from sklearn.ensemble import RandomForestClassifier as rf
 from sklearn.naive_bayes import GaussianNB
@@ -148,6 +148,81 @@ neigh = KNeighborsClassifier(n_neighbors=13).fit(X_train, y_train)
 y_pred = neigh.predict(X_test)
 nn_acc =  accuracy_score(y_pred, y_test) #0.61
 
+
+#########################################
+from sklearn.cross_validation import KFold
+from sklearn.cross_validation import StratifiedKFold
+import matplotlib.pyplot as plt
+
+def calc_params(X, y, clf, param_values, param_name, K, metric = 'accuracy'):
+    '''This function takes the classfier, the training data and labels, the name of the
+    parameter to vary, a list of values to vary by, and a number of folds needed for 
+    cross validation and returns a the test and train scores (accuracy or recall) and also
+    prints out a graph that shows the variation of the these scores accross different 
+    pararmeter values.
+    '''
+    # Convert input to Numpy arrays
+    X = np.array(X)
+    y = np.array(y)
+
+    # initialize training and testing scores with zeros
+    train_scores = np.zeros(len(param_values))
+    test_scores = np.zeros(len(param_values))
+    
+    # iterate over the different parameter values
+    for i, param_value in enumerate(param_values):
+        #print(param_name, ' = ', param_value)
+        
+        # set classifier parameters
+        clf.set_params(**{param_name:param_value})
+        
+        # initialize the K scores obtained for each fold
+        k_train_scores = np.zeros(K)
+        k_test_scores = np.zeros(K)
+        
+        # create KFold cross validation or stratified bootstrap validation
+        if metric == 'accuracy':
+            cv = KFold(len(X), K, shuffle=True, random_state=99)
+        
+        if metric == 'recall':
+            cv = StratifiedKFold(y, n_folds = K, shuffle=True, random_state=99)
+        
+        # iterate over the K folds
+        for j, (train, test) in enumerate(cv):
+            # fit the classifier in the corresponding fold
+            # and obtain the corresponding accuracy scores on train and test sets
+            clf.fit([X[k] for k in train], y[train])
+            if metric == 'accuracy':
+                k_train_scores[j] = clf.score([X[k] for k in train], y[train])
+                k_test_scores[j] = clf.score([X[k] for k in test], y[test])
+            elif metric == 'recall':
+                fit = clf.fit(X[train],y[train])
+                k_train_scores[j] = recall_score(fit.predict(X[train]),y[train], pos_label=1, average = 'binary')
+                k_test_scores[j] = recall_score(fit.predict(X[test]),y[test], pos_label=1, average = 'binary')
+       
+       # store the mean of the K fold scores
+        if metric == 'accuracy':
+            train_scores[i] = np.mean(k_train_scores)
+            test_scores[i] = np.mean(k_test_scores)
+        if metric == 'recall':
+            train_scores[i] = np.mean(k_train_scores)
+            test_scores[i] = np.mean(k_test_scores)
+       
+    # plot the training and testing scores in a log scale
+    plt.close()
+    plt.figure()
+    plt.plot(param_values, train_scores, label='Train', alpha=0.4, lw=2, c='b')
+    plt.plot(param_values, test_scores, label='Test', alpha=0.4, lw=2, c='g')
+    plt.legend(loc=7)
+    plt.xlabel(param_name + " values")
+    if metric == 'accuracy': plt.ylabel("Mean cross validation accuracy")
+    if metric == 'recall': plt.ylabel("Mean cross validation recall (Senstivity) for label 1")
+    plt.show()
+
+    # return the training and testing scores on each parameter value
+    return train_scores, test_scores
+
+
 ########FOCUSING ON LOGISTIC REGRESSION AND LDA TEST DATA########################
 from sklearn.linear_model import LogisticRegressionCV
 
@@ -162,11 +237,19 @@ y_pred = ldaC.predict_proba(test_standardized)
 ad_fit = ad(n_estimators = 10).fit(train_standardized, target)
 y_pred = ad_fit.predict_proba(test_standardized)
 
-rf_fit = rf().fit(train_standardized, target)
-y_pred = rf_fit.predict_proba(test_standardized)
 
+rf_fit = rf(random_state=99).fit(train_standardized, target)
 
+splitSizes = list(range(1,10,1))
+train_scores, test_scores = calc_params(train_standardized, target, rf_fit, splitSizes, 'min_samples_leaf', 5, metric = 'accuracy')
+pd.DataFrame(np.array([test_scores, splitSizes]).T, columns = ['Test Recall', 'Minimum Split Size'])
 
+nEst = range(1, 51, 10)
+train_scores, test_scores = calc_params(train_standardized, target, rf_fit, nEst, 'n_estimators', 5, metric = 'accuracy')
+pd.DataFrame(np.array([test_scores, nEst]).T, columns = ['Test Recall', 'Number of Estimators'])
+
+rf_fit = rf(min_samples_leaf=8, n_estimators = 1).fit(train_standardized, target) #min split of 8 gives least variance
+y_pred = rf_fit.predict_proba(test_standardized) 
 
 ################SUBMISSION#################
 
